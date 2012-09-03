@@ -1,0 +1,8 @@
+# Configuration file for iptables firewall
+# Deny outbound traffic for eth0
+
+# port          protocol        target
+
+sunrpc		tcp|udp		0.0.0.0/0		# Portmap
+443		tcp		192.168.9.0/24		# HTTPS from 192.168.9 net
+-		all		test.example.org	# Anything to test.example.org

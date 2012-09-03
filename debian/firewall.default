@@ -1,0 +1,2 @@
+FIREWALL_ENABLE=Off
+FIREWALL_EXAMPLES=/usr/share/doc/firewall/examples

@@ -1,0 +1,13 @@
+# Configuration file for iptables firewall
+# Allow outbound traffic for eth0 (other trafic is denied)
+
+# port          protocol        dest net
+
+-               icmp            0.0.0.0/0		# PING
+http		tcp		0.0.0.0/0		# HTTP
+443		tcp		0.0.0.0/0		# HTTPS
+ssh		tcp|udp		0.0.0.0/0		# SSH
+domain		tcp|udp		194.109.0.0/16		# DNS at xs4all
+ntp		udp		ntp.example.org		# NTP at ntp.example.org
+ntp		udp		ntp.xs4all.nl		# NTP at ntp.xs4all.nl
+snmp		tcp		smtp.example.org	# SMTP

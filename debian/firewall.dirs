@@ -1,0 +1,6 @@
+usr/sbin
+etc/firewall.allow
+etc/firewall.deny
+etc/firewall.bruteforce
+etc/network
+etc/init.d

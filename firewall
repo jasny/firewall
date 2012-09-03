@@ -1,0 +1,298 @@
+#!/bin/bash
+
+VERSION=2.0.1
+FIREWALL_CONFIG="/etc/firewall."
+FIREWALL_ENABLE=On
+
+[ -f /etc/default/firewall ] && . /etc/default/firewall
+[ -d "$FIREWALL_CONFIG" ] && FIREWALL_CONFIG="$FIREWALL_CONFIG/"
+
+. /lib/lsb/init-functions
+
+# Define some colors
+RED='\e[1;31m'
+BLUE='\e[1;34m'
+CYAN='\e[1;36m'
+NC='\e[0m' # No Color
+
+# Make it work as /etc/init.d script as well as /etc/networks/if-* script
+MODE=${MODE:-"$1"}
+IFACE=${IFACE:-"$2"}
+
+# Enable the firewall
+function enable_firewall()
+{
+	if [ "$FIREWALL_ENABLE" != "On" ] ; then
+		echo -e "${RED}!!! Firewall is disabled !!!${NC}"
+		echo " * Configure ${FIREWALL_CONFIG}allow, ${FIREWALL_CONFIG}deny and ${FIREWALL_CONFIG}bruteforce."
+	 	echo " * Enable the firewall in /etc/default/firewall."
+		[ -n "$FIREWALL_EXAMPLES" ] && echo "Example configuration can be found in $FIREWALL_EXAMPLES."
+	 	return 0
+	fi
+	
+	RET=0
+
+	# Firewall deny & allow
+	for TYPE in deny allow; do
+		if [ -z "$IFACE" ]; then
+			CONFIG_FILES="${FIREWALL_CONFIG}${TYPE}/*"
+		else
+			CONFIG_FILES="${FIREWALL_CONFIG}${TYPE}/$IFACE.*"
+		fi
+
+		for FILE in $CONFIG_FILES ; do
+			[ -e $FILE ] || continue;
+			enable_firewall_file "$TYPE" "$FILE"
+			RET=$((RET || $?))
+		done
+	done
+
+	# Bruteforce protection
+	if [ -z "$IFACE" ]; then
+		CONFIG_FILES="${FIREWALL_CONFIG}bruteforce/"*
+	else
+		CONFIG_FILES="${FIREWALL_CONFIG}bruteforce/$IFACE."*
+	fi
+	
+	for FILE in $CONFIG_FILES ; do
+		if [ ! -e "$FILE" ] ; then return; fi
+		enable_bruteforce_file "$FILE"
+		RET=$((RET || $?))
+	done
+	
+	return $RET
+}
+
+# Disable the firewall
+function disable_firewall()
+{
+	MATCH=".*"
+	if [ -n "$IFACE" ]; then MATCH=".*_$IFACE"; fi
+		
+	for BOUND in INPUT OUTPUT; do
+		for CHAIN in $(iptables -L $BOUND | awk '{if (match($1, /^FIREWALL_'$MATCH'$/)) print $1;}') ; do
+			disable_firewall_chain $BOUND "$CHAIN"
+			RET=$((RET || $?))
+		done
+	done
+	
+	return $RET
+}
+
+# Show the firewall rules
+function show_firewall()
+{
+	unset RET
+	MATCH=".*"
+	if [ -n "$IFACE" ]; then MATCH=".*_$IFACE"; fi
+		
+	for BOUND in INPUT OUTPUT; do
+		for CHAIN in $(iptables -L $BOUND | awk '{if (match($1, /^FIREWALL_'$MATCH'$/)) print $1;}') ; do
+			/sbin/iptables -vL "$CHAIN"
+			RET=$((RET || $?))
+			echo
+		done
+	done
+	
+	if [ -z "$RET" ] ; then
+		echo -e "The firewall is ${RED}disabled${NC}."
+		return 2
+	fi
+	
+	return $RET
+}
+
+
+# Get varibales from $TYPE and $CONFIG
+function getvars()
+{
+	FILE=$(/usr/bin/basename "$CONFIG")
+	INTERFACE=$(echo "$FILE" | awk -F '.' '{print $1}')
+	BOUND=$(echo "$FILE" | awk -F '.' '{print toupper($2)}')
+
+	if [ -n "$BOUND" ] ; then
+		CHAIN="FIREWALL_${TYPE}_${BOUND}_${INTERFACE}"
+	else
+		CHAIN="FIREWALL_${TYPE}_${INTERFACE}"
+		BOUND="$TYPE"
+	fi
+
+	if [ "$BOUND" == "OUTPUT" ] ; then
+		BOUND_IO='-o';
+		BOUND_NET='--destination';
+	else	
+		BOUND_IO='-i'
+		BOUND_NET='--source'
+	fi
+}
+
+# Create a firewall chain based on the name and contents of a config file
+function enable_firewall_file()
+{
+	TYPE=$(echo "$1" | awk '{print toupper($0)}')
+	CONFIG="$2"
+	getvars
+
+	ACTION="DROP"
+	if [ "$TYPE" == "ALLOW" ]; then ACTION="RETURN"; fi
+	
+	/sbin/iptables -L "$CHAIN" 2>/dev/null >/dev/null && return 2
+
+	# Create chain
+	log_action_begin_msg "Enabling firewall $TYPE $INTERFACE $BOUND"
+	
+	/sbin/iptables -N "$CHAIN"
+	/sbin/iptables -A "$CHAIN" -m state --state RELATED,ESTABLISHED -j RETURN
+
+	IFS=$(echo -en "\n\b")
+
+	for LINE in $(cat "$CONFIG"); do
+		LINE=${LINE%#*}
+		IFS=$(echo -en " \t")
+		set -- $LINE
+		[ -z "$1" ] && continue;
+
+		PORT=$1
+		PROTO=${2:-'tcp|udp'}
+		NET=${3:-'0.0.0.0/0'}
+
+		DEST="--destination-port"
+		if [ -z "$PORT" ] || [ "$PORT" == '-' ]; then DEST=''; PORT=''; fi
+		
+		IFS='|'
+		for PR in $PROTO; do
+			/sbin/iptables -A "$CHAIN" -p "$PR" $DEST $PORT $BOUND_NET "$NET" -j $ACTION
+		done
+	done
+
+	unset IFS
+
+	# Create chain
+	if [ "$TYPE" == "ALLOW" ]; then /sbin/iptables -A "$CHAIN" -j DROP; fi
+	/sbin/iptables -A "$BOUND" $BOUND_IO $INTERFACE -j "$CHAIN" 
+	RET=$?
+	
+	log_action_end_msg $RET
+	return $RET
+}
+
+# Create a firewall chain based on the name and contents of a config file
+function enable_bruteforce_file()
+{
+	# Get varibales from $CONFIG
+	TYPE="BRUTEFORCE"
+	CONFIG="$1"
+	getvars
+
+	/sbin/iptables -L "$CHAIN" 2>/dev/null >/dev/null && return 2
+
+	# Create chain
+	log_action_begin_msg "Enabling bruteforce protection $INTERFACE $BOUND"
+
+	/sbin/iptables -N "$CHAIN"
+	/sbin/iptables -A "$CHAIN" -m state --state ESTABLISHED,RELATED -j RETURN
+
+	COUNT=0
+	IFS=$(echo -en "\n\b")
+
+	for LINE in $(cat "$CONFIG"); do
+		LINE=${LINE%#*}
+		IFS=$(echo -en " \t")
+		set -- $LINE
+		[ -z "$1" ] && continue;
+
+		PORT=$1
+		PROTO=${2:-'tcp|udp'}
+		NET=${3:-'0.0.0.0/0'}
+		HITS=${4%/*}
+		SECONDS=${4#*/}
+
+		DEST="--destination-port"
+		if [ -z "$PORT" ] || [ "$PORT" == '-' ]; then DEST=''; PORT=''; fi
+		COUNTER="BRUTEFORCE_${BOUND}_${INTERFACE}_"$((++COUNT))
+
+		IFS='|'
+		for PR in $PROTO; do
+			if [ "$HITS" == "-" ] ; then
+				/sbin/iptables -A "$CHAIN" -p $PR $DEST $PORT $BOUND_NET "$NET" -j RETURN
+			else			
+				/sbin/iptables -A "$CHAIN" -p $PR $DEST $PORT $BOUND_NET "$NET" -m state --state NEW -m recent --set --name $COUNTER && \
+				/sbin/iptables -A "$CHAIN" -p $PR $DEST $PORT $BOUND_NET "$NET" -m recent --update --seconds $SECONDS --hitcount $((HITS+1)) --name $COUNTER -j DROP
+			fi
+		done
+	done
+
+	unset IFS
+
+	# Create chain
+	/sbin/iptables -A "$BOUND" $BOUND_IO $INTERFACE -j "$CHAIN" 
+	RET=$?
+	
+	log_action_end_msg $RET
+	return $RET
+}
+
+# Delete a firewall chain
+function disable_firewall_chain()
+{
+	# Get varibales from $CHAIN
+	BOUND=$1
+	CHAIN=$2
+	TYPE=$(echo "$CHAIN" | awk -F '_' '{print $2}')
+	INTERFACE=$(echo "$CHAIN" | awk -F '_' '{print $4}')
+	if [ "$BOUND" == "OUTPUT" ] ; then
+		BOUND_IO='-o';
+	else	
+		BOUND_IO='-i'
+	fi
+
+	# Remove chain
+	log_action_begin_msg "Disabling firewall $TYPE $INTERFACE $BOUND"
+	
+	/sbin/iptables -D "$BOUND" $BOUND_IO "$INTERFACE" -j "$CHAIN" && \
+	/sbin/iptables -F "$CHAIN" 2>/dev/null && iptables -X "$CHAIN"
+	RET=$?
+	
+	log_action_end_msg $RET
+	return $RET
+}
+
+
+case "$MODE" in
+""|start)
+	enable_firewall
+	exit $?
+	;;
+
+restart|force-reload)
+	disable_firewall
+	sleep 0.2
+	enable_firewall
+	exit $?
+	;;
+	
+stop)
+	disable_firewall
+	exit $?
+	;;
+
+status)
+	show_firewall
+	exit $?
+	;;
+
+-V|--version)
+	echo "iptables firewall v$VERSION"
+	exit 0
+	;;
+	
+-h|--help)
+        echo "Usage: $0 {start|stop|restart|force-reload} [INTERFACE]"
+	exit 0
+        ;;
+*)
+        echo "Usage: $0 {start|stop|restart|force-reload} [INTERFACE]"
+	exit 1
+esac        
+
+exit 0

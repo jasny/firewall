@@ -1,0 +1,31 @@
+firewall (2.0.2) lucid; urgency=low
+
+  * Removed link in init.d
+  * Fixed example config 'all' instead of 'any'
+  * Don't run together with ufw
+
+ -- Helder Hosting <debian@helderhosting.nl>  Wed, 01 Dec 2010 15:35:13 +0100
+
+firewall (2.0.1) hardy; urgency=low
+
+  * Fix related connection
+  * ! doesn't work, so remove it from examples
+
+ -- Helder Hosting <debian@helderhosting.nl>  Thu, 08 Oct 2009 16:05:31 +0200
+
+firewall (2.0.0) hardy; urgency=low
+
+  * New version
+  * Can do allow, deny and bruteforce
+
+ -- Arnold Daniels <arnold@helderhosting.nl>  Wed, 23 Sep 2009 02:39:33 +0200
+
+firewall (1.2.0) hardy; urgency=low
+
+  * New release (moved away from checkinstall)
+  * Added manual
+  * Added support to specify protocol per port
+  * Added support to specify target ip
+
+ -- Arnold Daniels <arnold@helderhosting.nl>  Tue, 22 Sep 2009 00:21:37 +0200
+

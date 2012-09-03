@@ -1,0 +1,2 @@
+/usr/sbin/firewall /etc/network/if-up.d/firewall
+/usr/sbin/firewall /etc/network/if-down.d/firewall

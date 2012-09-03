@@ -1,0 +1,14 @@
+# Configuration file for iptables firewall
+# Bruteforce/DoS protection for eth0 outbound trafiic
+# Maximum number of new connections to an IP
+
+# port		protocol	target			hits/second
+
+-		all		0.0.0.0/0		128/5		# Prevent DoS abuse
+
+-		icmp		10.0.0.0/8		-		# No PING protection for local network
+-		icmp		extern.example.com	-		# No PING protection for extern
+-		icmp		0.0.0.0/0		4/1		# ICMP-flood abuse
+
+ssh		tcp|udp		0.0.0.0/0		32/120		# SSH
+ntp		tcp		ntp.example.com		16/10		# Make sure to stay within policy

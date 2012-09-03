@@ -1,0 +1,11 @@
+# Configuration file for iptables firewall
+# Allow inbound traffic for eth0 (other traffic is denied)
+
+# port		protocol	source net
+
+-		icmp		0.0.0.0/0		# PING
+http		tcp		0.0.0.0/0		# HTTP
+443		tcp		0.0.0.0/0		# HTTPS
+ssh		tcp|udp		office.example.org	# SSH from office
+ssh		tcp|udp		home.example.org	# SSH from home
+snmp		udp		10.0.0.0/8		# SNMP from local network

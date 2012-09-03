@@ -1,0 +1,14 @@
+# Configuration file for iptables firewall
+# Bruteforce/DoS protection for eth0 inbound trafiic
+# Maximum number of new connections from an IP
+
+# port		protocol	target			hits/second
+
+-		all		0.0.0.0/0		128/5		# General DoS protection
+
+-		icmp		10.0.0.0/8		-		# No PING protection for local network
+-		icmp		office.example.com	-		# No PING protection for office
+-		icmp		0.0.0.0/0		4/1		# PING / ICMP-flood protection
+
+ssh		tcp|udp		0.0.0.0/0		32/120		# SSH
+25		tcp		mail.example.com	4/120		# Limit known spammer

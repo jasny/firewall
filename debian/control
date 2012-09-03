@@ -1,0 +1,14 @@
+Source: firewall
+Section: net
+Priority: standard
+Maintainer: Arnold Daniels <arnold@helderhosting.nl>
+Build-Depends: debhelper (>= 5)
+Standards-Version: 3.8.4
+
+Package: firewall
+Architecture: all
+Depends: iptables
+Conflicts: ufw
+Description: iptables based firewall
+ Configures iptables to deny and allow specific traffic and do bruteforce
+ protection.
